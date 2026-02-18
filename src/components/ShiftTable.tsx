@@ -1,20 +1,17 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo } from "react";
 import {
   Employee, ShiftAssignment, ShiftType,
   getDayName, getDateKey, getDaysOffInWeek, getWeekNumber,
+  getISOWeekNumber, getISOWeeksInYear,
 } from "@/lib/shiftTypes";
-
-interface Holiday {
-  name: string;
-  date: Array<{
-    date: string;
-    weekday: string;
-  }>;
-}
 
 interface ShiftTableProps {
   employees: Employee[];
   days: Date[];
+  monthDays: Date[];
+  viewYear: number;
+  viewMonth: number;
+  holidays: Map<string, string>;
   assignments: ShiftAssignment;
   onToggleShift: (employeeId: string, dateKey: string) => void;
 }
@@ -32,18 +29,9 @@ function ShiftCell({
   isHoliday: boolean;
   isWeekBoundary?: boolean;
 }) {
-  let cls = "w-full h-full flex items-center justify-center text-xs font-semibold rounded cursor-pointer transition-colors min-h-[36px] ";
+  let cls = "w-full h-full flex items-center justify-center text-xs font-semibold rounded cursor-pointer transition-colors min-h-[32px] sm:min-h-[36px] ";
 
-  if (isHoliday) {
-    cls += "bg-red-200 border-2 border-red-600 shadow-md ";
-    if (shift === "A") {
-      cls += "text-red-900 font-bold";
-    } else if (shift === "B") {
-      cls += "text-red-900 font-bold";
-    } else {
-      cls += "text-red-700 font-bold";
-    }
-  } else if (shift === "A") {
+  if (shift === "A") {
     cls += "bg-blue-500 text-white font-bold text-base";
   } else if (shift === "B") {
     cls += "bg-orange-500 text-white font-bold text-base";
@@ -62,40 +50,7 @@ function ShiftCell({
   );
 }
 
-export function ShiftTable({ employees, days, assignments, onToggleShift }: ShiftTableProps) {
-  const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
-
-  useEffect(() => {
-    const fetchHolidays = async () => {
-      if (days.length === 0) return;
-
-      const years = new Set<number>();
-      days.forEach(day => years.add(day.getFullYear()));
-
-      const holidayMap = new Map<string, string>();
-
-      for (const year of years) {
-        try {
-          const response = await fetch(`/api/holidays/${year}`);
-          const data: Holiday[] = await response.json();
-
-          data.forEach(holiday => {
-            holiday.date.forEach(dateInfo => {
-              const [year, month, day] = dateInfo.date.split('/');
-              const dateKey = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-              holidayMap.set(dateKey, holiday.name);
-            });
-          });
-        } catch (error) {
-          console.error(`Failed to fetch holidays for ${year}:`, error);
-        }
-      }
-
-      setHolidays(holidayMap);
-    };
-
-    fetchHolidays();
-  }, [days]);
+export function ShiftTable({ employees, days, monthDays, viewYear, viewMonth, holidays, assignments, onToggleShift }: ShiftTableProps) {
 
   const weekBoundaries = useMemo(() => {
     const boundaries = new Set<number>();
@@ -135,26 +90,43 @@ export function ShiftTable({ employees, days, assignments, onToggleShift }: Shif
     return holidays.get(dateKey);
   };
 
+  const isCurrentMonth = (date: Date): boolean =>
+    date.getFullYear() === viewYear && date.getMonth() === viewMonth;
+
   return (
     <div className="overflow-x-auto rounded-lg border bg-card">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 bg-gray-800 text-white px-3 py-2 text-left font-medium min-w-[140px]">Angajat</th>
+            <th className="sticky left-0 z-10 bg-gray-800 text-white px-2 sm:px-3 py-2 text-left font-medium min-w-[90px] sm:min-w-[140px]">Angajat</th>
             {days.map((d, i) => {
               const holiday = isHoliday(d);
               const holidayName = getHolidayName(d);
-              const baseColor = holiday ? "bg-red-700 text-white shadow-lg border-2 border-red-900" : getWeekColor(i);
+              const otherMonth = !isCurrentMonth(d);
+              const baseColor = otherMonth
+                ? "bg-gray-500 text-white opacity-50"
+                : holiday
+                ? "bg-red-700 text-white shadow-lg border-2 border-red-900"
+                : getWeekColor(i);
+
+              const isMonday = d.getDay() === 1;
+              const isoWeek = isMonday ? getISOWeekNumber(d) : null;
+              const weeksInYear = isMonday ? getISOWeeksInYear(d.getFullYear()) : null;
 
               return (
                 <th
                   key={i}
-                  className={`px-1 py-2 text-center font-medium min-w-[40px] ${baseColor} ${weekBoundaries.has(i) && !holiday ? "border-l-4 border-gray-900" : ""}`}
+                  className={`px-0.5 sm:px-1 py-1 sm:py-2 text-center font-medium min-w-[30px] sm:min-w-[40px] ${baseColor} ${weekBoundaries.has(i) && !holiday ? "border-l-4 border-gray-900" : ""}`}
                   title={holiday ? holidayName : undefined}
                 >
-                  <div className="text-[10px] opacity-70">{getDayName(d)}</div>
-                  <div className={holiday ? "font-bold" : ""}>{d.getDate()}</div>
-                  {holiday && <div className="text-[10px] font-normal mt-0.5">🎉</div>}
+                  {isoWeek !== null && (
+                    <div className="text-[8px] sm:text-[9px] font-bold opacity-90 leading-none mb-0.5 whitespace-nowrap">
+                      S{isoWeek}/{weeksInYear}
+                    </div>
+                  )}
+                  <div className="text-[9px] sm:text-[10px] opacity-70">{getDayName(d)}</div>
+                  <div className={`text-xs sm:text-sm ${holiday ? "font-bold" : ""}`}>{d.getDate()}</div>
+                  {holiday && !otherMonth && <div className="text-[9px] font-normal mt-0.5">🎉</div>}
                 </th>
               );
             })}
@@ -163,9 +135,9 @@ export function ShiftTable({ employees, days, assignments, onToggleShift }: Shif
         <tbody>
           {employees.map((emp, empIdx) => (
             <tr key={emp.id} className={empIdx % 2 === 0 ? "bg-card" : "bg-muted/30"}>
-              <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-inherit border-r">
-                <div className="font-medium">{emp.name}</div>
-                <div className="text-xs text-muted-foreground">{emp.position}</div>
+              <td className={`sticky left-0 z-10 px-2 sm:px-3 py-1 sm:py-2 font-medium border-r ${empIdx % 2 === 0 ? "bg-card" : "bg-muted"}`}>
+                <div className="font-medium text-xs sm:text-sm leading-tight">{emp.name}</div>
+                <div className="text-[10px] sm:text-xs text-muted-foreground leading-tight hidden sm:block">{emp.position}</div>
               </td>
               {days.map((d, i) => {
                 const dateKey = getDateKey(d);

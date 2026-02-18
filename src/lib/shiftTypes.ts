@@ -52,6 +52,42 @@ export function getDaysInMonth(year: number, month: number): Date[] {
   return days;
 }
 
+export function getMonthViewDays(year: number, month: number): Date[] {
+  const firstDay = new Date(year, month, 1);
+  const firstDayOfWeek = firstDay.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+
+  // Determine start: first Monday of the first week containing the month.
+  // If month starts on Sunday (isolated single day before the first full Mon-Sun week), skip it.
+  let startDate: Date;
+  if (firstDayOfWeek === 0) {
+    // Month starts on Sunday – start from the next Monday instead
+    startDate = new Date(year, month, 2);
+  } else if (firstDayOfWeek === 1) {
+    // Month starts on Monday – start from day 1
+    startDate = new Date(year, month, 1);
+  } else {
+    // Month starts on Tue–Sat – go back to the previous Monday (prev month days)
+    startDate = new Date(year, month, 1);
+    startDate.setDate(1 - (firstDayOfWeek - 1));
+  }
+
+  // Determine end: the first Sunday on or after the last day of the month.
+  const lastDay = new Date(year, month + 1, 0);
+  const lastDayOfWeek = lastDay.getDay();
+  const endDate = new Date(lastDay);
+  if (lastDayOfWeek !== 0) {
+    endDate.setDate(lastDay.getDate() + (7 - lastDayOfWeek));
+  }
+
+  const days: Date[] = [];
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    days.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return days;
+}
+
 export function getWeekNumber(date: Date, monthStart: Date): number {
   // Get day of week for the date (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
   const dayOfWeek = date.getDay();
@@ -83,6 +119,25 @@ export function getWeekNumber(date: Date, monthStart: Date): number {
 
 export function getDayName(date: Date): string {
   return date.toLocaleDateString("ro-RO", { weekday: "short" });
+}
+
+export function getISOWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7; // Mon=1 … Sun=7
+  d.setUTCDate(d.getUTCDate() + 4 - day); // Thursday of this week
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+}
+
+export function getISOWeeksInYear(year: number): number {
+  // A year has 53 weeks if Dec 31 or Jan 1 falls on Thursday
+  const dec31 = new Date(Date.UTC(year, 11, 31));
+  const day = dec31.getUTCDay() || 7;
+  return day === 4 || (day === 3 && isLeapYear(year)) ? 53 : 52;
+}
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
 export function getDateKey(date: Date): string {

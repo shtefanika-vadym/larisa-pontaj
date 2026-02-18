@@ -23,14 +23,14 @@ export function MonthPicker({ year, month, onChange }: MonthPickerProps) {
   };
 
   return (
-    <div className="flex items-center gap-3">
-      <Button variant="outline" size="icon" onClick={prev} aria-label="Luna anterioară">
+    <div className="flex items-center gap-1 sm:gap-3">
+      <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={prev} aria-label="Luna anterioară">
         <ChevronLeft className="h-4 w-4" />
       </Button>
-      <span className="text-lg font-semibold min-w-[180px] text-center">
+      <span className="text-sm sm:text-lg font-semibold min-w-[120px] sm:min-w-[180px] text-center">
         {MONTH_NAMES[month]} {year}
       </span>
-      <Button variant="outline" size="icon" onClick={next} aria-label="Luna următoare">
+      <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={next} aria-label="Luna următoare">
         <ChevronRight className="h-4 w-4" />
       </Button>
     </div>

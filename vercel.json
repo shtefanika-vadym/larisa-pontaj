@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/holidays/:year",
+      "destination": "https://zilelibere.webventure.ro/api/:year"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

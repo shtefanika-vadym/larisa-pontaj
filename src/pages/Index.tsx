@@ -6,11 +6,12 @@ import { ExportButton } from "@/components/ExportButton";
 import { EmployeeManager } from "@/components/EmployeeManager";
 import {
   Employee, ShiftAssignment, ShiftType,
-  getDaysInMonth, getDateKey,
+  getDaysInMonth, getMonthViewDays, getDateKey,
   SHIFT_A_TIME, SHIFT_B_TIME,
 } from "@/lib/shiftTypes";
 import { CalendarDays } from "lucide-react";
 import { useFirebaseData } from "@/hooks/useFirebaseData";
+import { useHolidays } from "@/hooks/useHolidays";
 
 const MONTH_NAMES = [
   "Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie",
@@ -33,6 +34,8 @@ const Index = () => {
   } = useFirebaseData(year, month);
 
   const days = useMemo(() => getDaysInMonth(year, month), [year, month]);
+  const viewDays = useMemo(() => getMonthViewDays(year, month), [year, month]);
+  const holidays = useHolidays(viewDays);
   const monthLabel = `${MONTH_NAMES[month]} ${year}`;
 
   const handleMonthChange = useCallback((y: number, m: number) => {
@@ -82,68 +85,68 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card sticky top-0 z-20">
-        <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
-              <CalendarDays className="h-5 w-5 text-primary-foreground" />
+        <div className="max-w-[1600px] mx-auto px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
+              <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold leading-tight">Planificator de Ture</h1>
-              <p className="text-xs text-muted-foreground">Gestionarea lunară a turilor angajaților</p>
+              <h1 className="text-base sm:text-lg font-bold leading-tight">Planificator de Ture</h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">Gestionarea lunară a turilor angajaților</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3">
             <MonthPicker year={year} month={month} onChange={handleMonthChange} />
-            <ExportButton employees={employees} days={days} assignments={assignments} monthLabel={monthLabel} />
+            <ExportButton employees={employees} days={days} viewDays={viewDays} assignments={assignments} monthLabel={monthLabel} viewYear={year} viewMonth={month} />
           </div>
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto px-4 py-6 space-y-6">
-        {/* Legend & Summary */}
-        <div className="space-y-4">
-          <div className="rounded-lg border bg-card p-4">
-            <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Legendă</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded bg-blue-500 text-white flex items-center justify-center font-bold text-base">1</span>
-                  <div>
-                    <div className="font-medium">Tura 1</div>
-                    <div className="text-xs text-muted-foreground">{SHIFT_A_TIME}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded bg-orange-500 text-white flex items-center justify-center font-bold text-base">2</span>
-                  <div>
-                    <div className="font-medium">Tura 2</div>
-                    <div className="text-xs text-muted-foreground">{SHIFT_B_TIME}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded bg-emerald-100 text-emerald-700 border border-emerald-300 flex items-center justify-center font-bold text-base">–</span>
-                  <div>
-                    <div className="font-medium">Zi Liberă</div>
-                    <div className="text-xs text-muted-foreground">2 pe săptămână</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded bg-red-100 flex items-center justify-center font-bold text-base line-through text-red-600">✕</span>
-                  <div>
-                    <div className="font-medium">Zi Neconfigurată</div>
-                    <div className="text-xs text-muted-foreground">Fără tură alocată</div>
-                  </div>
-                </div>
+      <main className="max-w-[1600px] mx-auto px-2 sm:px-4 py-3 sm:py-6 space-y-4 sm:space-y-6">
+        {/* Legend */}
+        <div className="rounded-lg border bg-card p-3 sm:p-4">
+          <h3 className="text-xs font-semibold mb-2 sm:mb-3 text-muted-foreground uppercase tracking-wide">Legendă</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 sm:w-8 sm:h-8 rounded bg-blue-500 text-white flex items-center justify-center font-bold text-sm sm:text-base shrink-0">1</span>
+              <div>
+                <div className="font-medium text-xs sm:text-sm">Tura 1</div>
+                <div className="text-xs text-muted-foreground hidden sm:block">{SHIFT_A_TIME}</div>
               </div>
-            <p className="text-xs text-muted-foreground mt-4">Apasă pe o celulă pentru a schimba: Liberă → Tura 1 → Tura 2 → Liberă. Tabelul se derulează orizontal pentru a arăta toate zilele.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 sm:w-8 sm:h-8 rounded bg-orange-500 text-white flex items-center justify-center font-bold text-sm sm:text-base shrink-0">2</span>
+              <div>
+                <div className="font-medium text-xs sm:text-sm">Tura 2</div>
+                <div className="text-xs text-muted-foreground hidden sm:block">{SHIFT_B_TIME}</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 sm:w-8 sm:h-8 rounded bg-emerald-100 text-emerald-700 border border-emerald-300 flex items-center justify-center font-bold text-sm sm:text-base shrink-0">–</span>
+              <div>
+                <div className="font-medium text-xs sm:text-sm">Zi Liberă</div>
+                <div className="text-xs text-muted-foreground hidden sm:block">2 pe săptămână</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 sm:w-8 sm:h-8 rounded bg-red-100 flex items-center justify-center font-bold text-sm sm:text-base line-through text-red-600 shrink-0">✕</span>
+              <div>
+                <div className="font-medium text-xs sm:text-sm">Neconfigurat</div>
+                <div className="text-xs text-muted-foreground hidden sm:block">Fără tură alocată</div>
+              </div>
+            </div>
           </div>
-
-          {/* Analytics */}
+          <p className="text-xs text-muted-foreground mt-3 hidden sm:block">Apasă pe o celulă pentru a schimba: Liberă → Tura 1 → Tura 2 → Liberă.</p>
         </div>
 
         {/* Shift Table */}
         <ShiftTable
           employees={employees}
-          days={days}
+          days={viewDays}
+          monthDays={days}
+          viewYear={year}
+          viewMonth={month}
+          holidays={holidays}
           assignments={assignments}
           onToggleShift={toggleShift}
         />
@@ -152,6 +155,7 @@ const Index = () => {
             employees={employees}
             days={days}
             assignments={assignments}
+            holidays={holidays}
             onChange={handleEmployeesChange}
             onAdd={addEmployee}
             onRemove={removeEmployee}
