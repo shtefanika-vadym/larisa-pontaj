@@ -11,6 +11,14 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      '/api/holidays': {
+        target: 'https://zilelibere.webventure.ro',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/holidays/, '/api'),
+        secure: false,
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

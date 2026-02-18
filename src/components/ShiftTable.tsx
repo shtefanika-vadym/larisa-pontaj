@@ -1,8 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Employee, ShiftAssignment, ShiftType,
   getDayName, getDateKey, getDaysOffInWeek, getWeekNumber,
 } from "@/lib/shiftTypes";
+
+interface Holiday {
+  name: string;
+  date: Array<{
+    date: string;
+    weekday: string;
+  }>;
+}
 
 interface ShiftTableProps {
   employees: Employee[];
@@ -15,64 +23,149 @@ function ShiftCell({
   shift,
   reachedLimit,
   onClick,
+  isHoliday,
+  isWeekBoundary,
 }: {
   shift: ShiftType;
   reachedLimit: boolean;
   onClick: () => void;
+  isHoliday: boolean;
+  isWeekBoundary?: boolean;
 }) {
   let cls = "w-full h-full flex items-center justify-center text-xs font-semibold rounded cursor-pointer transition-colors min-h-[36px] ";
-  if (shift === "A") {
-    cls += "bg-shift-a-bg text-shift-a";
+
+  if (isHoliday) {
+    cls += "bg-red-200 border-2 border-red-600 shadow-md ";
+    if (shift === "A") {
+      cls += "text-red-900 font-bold";
+    } else if (shift === "B") {
+      cls += "text-red-900 font-bold";
+    } else {
+      cls += "text-red-700 font-bold";
+    }
+  } else if (shift === "A") {
+    cls += "bg-blue-500 text-white font-bold text-base";
   } else if (shift === "B") {
-    cls += "bg-shift-b-bg text-shift-b";
+    cls += "bg-orange-500 text-white font-bold text-base";
   } else if (reachedLimit) {
-    cls += "bg-warning-bg text-warning line-through";
+    cls += "bg-red-100 text-red-600 line-through";
   } else {
-    cls += "bg-day-off text-day-off-foreground hover:bg-accent";
+    cls += "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200";
   }
 
   return (
-    <td className="p-0.5">
+    <td className={`p-0.5 ${isWeekBoundary ? "border-l-4 border-gray-900" : ""}`}>
       <div className={cls} onClick={onClick}>
-        {shift === "A" ? "A" : shift === "B" ? "B" : reachedLimit ? "✕" : "–"}
+        {shift === "A" ? "1" : shift === "B" ? "2" : reachedLimit ? "✕" : "–"}
       </div>
     </td>
   );
 }
 
 export function ShiftTable({ employees, days, assignments, onToggleShift }: ShiftTableProps) {
+  const [holidays, setHolidays] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      if (days.length === 0) return;
+
+      const years = new Set<number>();
+      days.forEach(day => years.add(day.getFullYear()));
+
+      const holidayMap = new Map<string, string>();
+
+      for (const year of years) {
+        try {
+          const response = await fetch(`/api/holidays/${year}`);
+          const data: Holiday[] = await response.json();
+
+          data.forEach(holiday => {
+            holiday.date.forEach(dateInfo => {
+              const [year, month, day] = dateInfo.date.split('/');
+              const dateKey = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+              holidayMap.set(dateKey, holiday.name);
+            });
+          });
+        } catch (error) {
+          console.error(`Failed to fetch holidays for ${year}:`, error);
+        }
+      }
+
+      setHolidays(holidayMap);
+    };
+
+    fetchHolidays();
+  }, [days]);
+
   const weekBoundaries = useMemo(() => {
     const boundaries = new Set<number>();
-    for (let i = 1; i < days.length; i++) {
-      if (getWeekNumber(days[i], days[0]) !== getWeekNumber(days[i - 1], days[0])) {
+    for (let i = 0; i < days.length; i++) {
+      const dayOfWeek = days[i].getDay();
+      // Check if it's Monday (1) and not the first day
+      if (dayOfWeek === 1 && i > 0) {
         boundaries.add(i);
       }
     }
     return boundaries;
   }, [days]);
 
+  const weekColors = [
+    "bg-blue-600 text-white",
+    "bg-green-500 text-white",
+    "bg-amber-600 text-white",
+    "bg-rose-600 text-white",
+    "bg-cyan-600 text-white",
+    "bg-indigo-600 text-white",
+  ];
+
+  const getWeekColor = (dayIndex: number) => {
+    const date = days[dayIndex];
+    const weekNum = getWeekNumber(date, days[0]);
+    // weekNum is 1-based, convert to 0-based index for colors array
+    return weekColors[(weekNum - 1) % weekColors.length];
+  };
+
+  const isHoliday = (date: Date): boolean => {
+    const dateKey = getDateKey(date);
+    return holidays.has(dateKey);
+  };
+
+  const getHolidayName = (date: Date): string | undefined => {
+    const dateKey = getDateKey(date);
+    return holidays.get(dateKey);
+  };
+
   return (
     <div className="overflow-x-auto rounded-lg border bg-card">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="bg-primary text-primary-foreground">
-            <th className="sticky left-0 z-10 bg-primary px-3 py-2 text-left font-medium min-w-[140px]">Employee</th>
-            {days.map((d, i) => (
-              <th
-                key={i}
-                className={`px-1 py-2 text-center font-medium min-w-[40px] ${weekBoundaries.has(i) ? "border-l-2 border-primary-foreground/30" : ""}`}
-              >
-                <div className="text-[10px] opacity-70">{getDayName(d)}</div>
-                <div>{d.getDate()}</div>
-              </th>
-            ))}
+          <tr>
+            <th className="sticky left-0 z-10 bg-gray-800 text-white px-3 py-2 text-left font-medium min-w-[140px]">Angajat</th>
+            {days.map((d, i) => {
+              const holiday = isHoliday(d);
+              const holidayName = getHolidayName(d);
+              const baseColor = holiday ? "bg-red-700 text-white shadow-lg border-2 border-red-900" : getWeekColor(i);
+
+              return (
+                <th
+                  key={i}
+                  className={`px-1 py-2 text-center font-medium min-w-[40px] ${baseColor} ${weekBoundaries.has(i) && !holiday ? "border-l-4 border-gray-900" : ""}`}
+                  title={holiday ? holidayName : undefined}
+                >
+                  <div className="text-[10px] opacity-70">{getDayName(d)}</div>
+                  <div className={holiday ? "font-bold" : ""}>{d.getDate()}</div>
+                  {holiday && <div className="text-[10px] font-normal mt-0.5">🎉</div>}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
           {employees.map((emp, empIdx) => (
             <tr key={emp.id} className={empIdx % 2 === 0 ? "bg-card" : "bg-muted/30"}>
               <td className="sticky left-0 z-10 px-3 py-2 font-medium bg-inherit border-r">
-                {emp.name}
+                <div className="font-medium">{emp.name}</div>
+                <div className="text-xs text-muted-foreground">{emp.position}</div>
               </td>
               {days.map((d, i) => {
                 const dateKey = getDateKey(d);
@@ -85,6 +178,8 @@ export function ShiftTable({ employees, days, assignments, onToggleShift }: Shif
                     shift={shift}
                     reachedLimit={reachedLimit}
                     onClick={() => onToggleShift(emp.id, dateKey)}
+                    isHoliday={isHoliday(d)}
+                    isWeekBoundary={weekBoundaries.has(i)}
                   />
                 );
               })}

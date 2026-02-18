@@ -8,8 +8,8 @@ interface MonthPickerProps {
 }
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie",
+  "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie",
 ];
 
 export function MonthPicker({ year, month, onChange }: MonthPickerProps) {
@@ -24,13 +24,13 @@ export function MonthPicker({ year, month, onChange }: MonthPickerProps) {
 
   return (
     <div className="flex items-center gap-3">
-      <Button variant="outline" size="icon" onClick={prev} aria-label="Previous month">
+      <Button variant="outline" size="icon" onClick={prev} aria-label="Luna anterioară">
         <ChevronLeft className="h-4 w-4" />
       </Button>
       <span className="text-lg font-semibold min-w-[180px] text-center">
         {MONTH_NAMES[month]} {year}
       </span>
-      <Button variant="outline" size="icon" onClick={next} aria-label="Next month">
+      <Button variant="outline" size="icon" onClick={next} aria-label="Luna următoare">
         <ChevronRight className="h-4 w-4" />
       </Button>
     </div>

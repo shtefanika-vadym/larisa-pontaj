@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { MonthPicker } from "@/components/MonthPicker";
 import { ShiftTable } from "@/components/ShiftTable";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
@@ -6,22 +6,31 @@ import { ExportButton } from "@/components/ExportButton";
 import { EmployeeManager } from "@/components/EmployeeManager";
 import {
   Employee, ShiftAssignment, ShiftType,
-  DEFAULT_EMPLOYEES, getDaysInMonth, getDateKey,
+  getDaysInMonth, getDateKey,
   SHIFT_A_TIME, SHIFT_B_TIME,
 } from "@/lib/shiftTypes";
 import { CalendarDays } from "lucide-react";
+import { useFirebaseData } from "@/hooks/useFirebaseData";
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie",
+  "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie",
 ];
 
 const Index = () => {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
-  const [employees, setEmployees] = useState<Employee[]>(DEFAULT_EMPLOYEES);
-  const [assignments, setAssignments] = useState<ShiftAssignment>({});
+
+  const {
+    employees,
+    assignments,
+    loading,
+    saveEmployees,
+    addEmployee,
+    removeEmployee,
+    saveAssignments,
+  } = useFirebaseData(year, month);
 
   const days = useMemo(() => getDaysInMonth(year, month), [year, month]);
   const monthLabel = `${MONTH_NAMES[month]} ${year}`;
@@ -31,22 +40,43 @@ const Index = () => {
     setMonth(m);
   }, []);
 
-  const toggleShift = useCallback((employeeId: string, dateKey: string) => {
-    setAssignments((prev) => {
-      const current = prev[employeeId]?.[dateKey] ?? null;
+  const handleEmployeesChange = useCallback(
+    (newEmployees: Employee[]) => {
+      saveEmployees(newEmployees);
+    },
+    [saveEmployees]
+  );
+
+  const toggleShift = useCallback(
+    (employeeId: string, dateKey: string) => {
+      const current = assignments[employeeId]?.[dateKey] ?? null;
       const cycle: ShiftType[] = [null, "A", "B"];
       const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
       const next = cycle[nextIdx];
 
-      return {
-        ...prev,
+      const updatedAssignments = {
+        ...assignments,
         [employeeId]: {
-          ...prev[employeeId],
+          ...assignments[employeeId],
           [dateKey]: next,
         },
       };
-    });
-  }, []);
+
+      saveAssignments(updatedAssignments, year, month);
+    },
+    [assignments, year, month, saveAssignments]
+  );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg font-semibold mb-2">Se încarcă datele...</div>
+          <div className="text-sm text-muted-foreground">Vă rugăm așteptați</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,8 +88,8 @@ const Index = () => {
               <CalendarDays className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-lg font-bold leading-tight">Shift Scheduler</h1>
-              <p className="text-xs text-muted-foreground">Monthly employee shift management</p>
+              <h1 className="text-lg font-bold leading-tight">Planificator de Ture</h1>
+              <p className="text-xs text-muted-foreground">Gestionarea lunară a turilor angajaților</p>
             </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -70,47 +100,44 @@ const Index = () => {
       </header>
 
       <main className="max-w-[1600px] mx-auto px-4 py-6 space-y-6">
-        {/* Legend + Employees side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-1">
-            <EmployeeManager employees={employees} onChange={setEmployees} />
-          </div>
-          <div className="lg:col-span-2">
-            <div className="rounded-lg border bg-card p-4 h-full">
-              <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Legend</h3>
+        {/* Legend & Summary */}
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-card p-4">
+            <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Legendă</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded bg-shift-a-bg text-shift-a flex items-center justify-center font-bold text-xs">A</span>
+                  <span className="w-8 h-8 rounded bg-blue-500 text-white flex items-center justify-center font-bold text-base">1</span>
                   <div>
-                    <div className="font-medium">Group A</div>
+                    <div className="font-medium">Tura 1</div>
                     <div className="text-xs text-muted-foreground">{SHIFT_A_TIME}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded bg-shift-b-bg text-shift-b flex items-center justify-center font-bold text-xs">B</span>
+                  <span className="w-8 h-8 rounded bg-orange-500 text-white flex items-center justify-center font-bold text-base">2</span>
                   <div>
-                    <div className="font-medium">Group B</div>
+                    <div className="font-medium">Tura 2</div>
                     <div className="text-xs text-muted-foreground">{SHIFT_B_TIME}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded bg-day-off text-day-off-foreground flex items-center justify-center font-bold text-xs">–</span>
+                  <span className="w-8 h-8 rounded bg-emerald-100 text-emerald-700 border border-emerald-300 flex items-center justify-center font-bold text-base">–</span>
                   <div>
-                    <div className="font-medium">Day Off</div>
-                    <div className="text-xs text-muted-foreground">Not assigned</div>
+                    <div className="font-medium">Zi Liberă</div>
+                    <div className="text-xs text-muted-foreground">2 pe săptămână</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded bg-warning-bg text-warning flex items-center justify-center font-bold text-xs line-through">✕</span>
+                  <span className="w-8 h-8 rounded bg-red-100 flex items-center justify-center font-bold text-base line-through text-red-600">✕</span>
                   <div>
-                    <div className="font-medium">Limit Reached</div>
-                    <div className="text-xs text-muted-foreground">2+ offs this week</div>
+                    <div className="font-medium">Zi Neconfigurată</div>
+                    <div className="text-xs text-muted-foreground">Fără tură alocată</div>
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-4">Click a cell to cycle: Off → A → B → Off. The table scrolls horizontally to show all days.</p>
-            </div>
+            <p className="text-xs text-muted-foreground mt-4">Apasă pe o celulă pentru a schimba: Liberă → Tura 1 → Tura 2 → Liberă. Tabelul se derulează orizontal pentru a arăta toate zilele.</p>
           </div>
+
+          {/* Analytics */}
         </div>
 
         {/* Shift Table */}
@@ -121,8 +148,14 @@ const Index = () => {
           onToggleShift={toggleShift}
         />
 
-        {/* Analytics */}
-        <AnalyticsDashboard employees={employees} days={days} assignments={assignments} />
+        <AnalyticsDashboard
+            employees={employees}
+            days={days}
+            assignments={assignments}
+            onChange={handleEmployeesChange}
+            onAdd={addEmployee}
+            onRemove={removeEmployee}
+        />
       </main>
     </div>
   );

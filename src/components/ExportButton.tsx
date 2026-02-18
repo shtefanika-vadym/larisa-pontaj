@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import {
   Employee, ShiftAssignment,
-  getDayName, getDateKey, getEmployeeStats,
+  getDayName, getDateKey, getEmployeeStats, getWeekNumber,
   SHIFT_A_TIME, SHIFT_B_TIME,
 } from "@/lib/shiftTypes";
 
@@ -16,49 +16,136 @@ interface ExportButtonProps {
 
 export function ExportButton({ employees, days, assignments, monthLabel }: ExportButtonProps) {
   const handleExport = () => {
-    const rows: Record<string, string | number>[] = [];
+    const wb = XLSX.utils.book_new();
 
-    for (const d of days) {
-      const dateKey = getDateKey(d);
-      const dateStr = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
-      const dayName = getDayName(d);
+    // Group days by week (Monday to Sunday)
+    const weeks: Date[][] = [[], [], [], []];
+    let currentWeekIndex = 0;
 
-      for (const emp of employees) {
-        const shift = assignments[emp.id]?.[dateKey];
-        rows.push({
-          Date: dateStr,
-          Day: dayName,
-          Employee: emp.name,
-          Shift: shift === "A" ? `Group A (${SHIFT_A_TIME})` : shift === "B" ? `Group B (${SHIFT_B_TIME})` : "Day Off",
-        });
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const dayOfWeek = day.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+      // If it's Monday and not the first day, move to next week
+      if (dayOfWeek === 1 && i > 0 && weeks[currentWeekIndex].length > 0) {
+        currentWeekIndex++;
+        if (currentWeekIndex >= 4) break; // Only 4 weeks
+      }
+
+      // Only start adding days from the first Monday
+      if (currentWeekIndex === 0 && dayOfWeek !== 1 && weeks[0].length === 0) {
+        continue; // Skip days before first Monday
+      }
+
+      if (currentWeekIndex < 4) {
+        weeks[currentWeekIndex].push(day);
       }
     }
 
-    // Add summary section
-    rows.push({});
-    rows.push({ Date: "MONTHLY SUMMARY", Day: "", Employee: "", Shift: "" });
-    rows.push({ Date: "Employee", Day: "Days Worked", Employee: "Group A", Shift: "Group B" });
+    // Create exactly 4 week sheets
+    weeks.forEach((weekDays, weekIndex) => {
+      if (weekDays.length === 0) return; // Skip empty weeks
+      const weekData: any[] = [];
 
-    for (const emp of employees) {
-      const stats = getEmployeeStats(assignments, emp.id, days);
-      rows.push({
-        Date: emp.name,
-        Day: stats.totalWorked,
-        Employee: stats.groupA as unknown as string,
-        Shift: stats.groupB as unknown as string,
+      // Create header row
+      const header: any = {
+        Angajat: 'Angajat',
+        Funcție: 'Funcție',
+      };
+
+      weekDays.forEach(day => {
+        const dayName = getDayName(day).substring(0, 1).toUpperCase(); // L, M, M, J, V, S, D
+        const dayStr = String(day.getDate()).padStart(2, '0');
+        const monthStr = String(day.getMonth() + 1).padStart(2, '0');
+        const columnKey = `${dayName} ${dayStr}.${monthStr}`;
+        header[columnKey] = columnKey;
       });
-    }
 
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Shifts");
-    XLSX.writeFile(wb, `Shift_Schedule_${monthLabel.replace(" ", "_")}.xlsx`);
+      weekData.push(header);
+
+      // Add employee rows
+      employees.forEach(emp => {
+        const row: any = {
+          Angajat: emp.name,
+          Funcție: emp.position,
+        };
+
+        weekDays.forEach(day => {
+          const dayName = getDayName(day).substring(0, 1).toUpperCase();
+          const dayStr = String(day.getDate()).padStart(2, '0');
+          const monthStr = String(day.getMonth() + 1).padStart(2, '0');
+          const columnKey = `${dayName} ${dayStr}.${monthStr}`;
+
+          const dateKey = getDateKey(day);
+          const shift = assignments[emp.id]?.[dateKey];
+          row[columnKey] = shift === "A" ? SHIFT_A_TIME : shift === "B" ? SHIFT_B_TIME : "L";
+        });
+
+        weekData.push(row);
+      });
+
+      const ws = XLSX.utils.json_to_sheet(weekData, { skipHeader: true });
+      // Column widths: Angajat=28, Funcție=24, then day columns=18 each
+      ws['!cols'] = [
+        { wch: 28 },
+        { wch: 24 },
+        ...weekDays.map(() => ({ wch: 18 })),
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, `Săptămâna ${weekIndex + 1}`);
+    });
+
+    // Create summary sheet
+    const summaryData: any[] = [
+      {
+        Angajat: 'Angajat',
+        Funcție: 'Funcție',
+        'Zile Lucrate': 'Zile Lucrate',
+        'Tura 1': 'Tura 1',
+        'Tura 2': 'Tura 2',
+        'Zile Libere': 'Zile Libere',
+      }
+    ];
+
+    employees.forEach(emp => {
+      const stats = getEmployeeStats(assignments, emp.id, days);
+      const daysOff = days.length - stats.totalWorked;
+      summaryData.push({
+        Angajat: emp.name,
+        Funcție: emp.position,
+        'Zile Lucrate': stats.totalWorked,
+        'Tura 1': stats.groupA,
+        'Tura 2': stats.groupB,
+        'Zile Libere': daysOff,
+      });
+    });
+
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData, { skipHeader: true });
+    wsSummary['!cols'] = [
+      { wch: 28 },
+      { wch: 24 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Sumar");
+
+    // Generate filename
+    const startDate = days[0];
+    const endDate = days[days.length - 1];
+    const startDay = String(startDate.getDate()).padStart(2, '0');
+    const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
+    const endDay = String(endDate.getDate()).padStart(2, '0');
+    const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
+    const filename = `pontaj-${startDay}.${startMonth}-${endDay}.${endMonth}.xlsx`;
+
+    XLSX.writeFile(wb, filename);
   };
 
   return (
     <Button onClick={handleExport} className="gap-2">
       <Download className="h-4 w-4" />
-      Export to Excel
+      Exportă în Excel
     </Button>
   );
 }

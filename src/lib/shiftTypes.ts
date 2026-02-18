@@ -3,6 +3,7 @@ export type ShiftType = "A" | "B" | null;
 export interface Employee {
   id: string;
   name: string;
+  position: string;
 }
 
 export interface ShiftAssignment {
@@ -18,12 +19,25 @@ export interface EmployeeStats {
 }
 
 export const DEFAULT_EMPLOYEES: Employee[] = [
-  { id: "emp1", name: "Ahmed Al-Rashid" },
-  { id: "emp2", name: "Sara Mahmoud" },
-  { id: "emp3", name: "Omar Khalil" },
-  { id: "emp4", name: "Fatima Hassan" },
-  { id: "emp5", name: "Youssef Nabil" },
+  { id: "emp1", name: "Matei Larisa", position: "SEF MAGAZIN" },
+  { id: "emp2", name: "Cuziac Adelina-Valentina", position: "SEF TURA" },
+  { id: "emp3", name: "Teodorovici Ramona-Carmen", position: "CASIER" },
+  { id: "emp4", name: "Teodorovici Zinica", position: "CASIER" },
+  { id: "emp5", name: "Moloci Lacramioara", position: "LUCRATOR COMERCIAL" },
+  { id: "emp6", name: "Sterciuc Valeria-Mihaela", position: "VANZATOR COFFE CORNER" },
+  { id: "emp7", name: "Graunceanu Mihai", position: "LUCRATOR COMERCIAL" },
+  { id: "emp8", name: "Simionesi Elisabeta", position: "VANZATOR MEZELURI" },
+  { id: "emp9", name: "Tibu Lucia", position: "VANZATOR MEZELURI" },
 ];
+
+export const POSITIONS = [
+  "SEF MAGAZIN",
+  "SEF TURA",
+  "CASIER",
+  "LUCRATOR COMERCIAL",
+  "VANZATOR COFFE CORNER",
+  "VANZATOR MEZELURI",
+] as const;
 
 export const SHIFT_A_TIME = "06:30 – 15:00";
 export const SHIFT_B_TIME = "14:00 – 22:30";
@@ -39,13 +53,36 @@ export function getDaysInMonth(year: number, month: number): Date[] {
 }
 
 export function getWeekNumber(date: Date, monthStart: Date): number {
-  const startOfMonth = new Date(monthStart);
-  const dayOfMonth = date.getDate();
-  return Math.ceil(dayOfMonth / 7);
+  // Get day of week for the date (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const dayOfWeek = date.getDay();
+
+  // Convert to ISO format where Monday = 1, Sunday = 7
+  const isoDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+
+  // Find the Monday of the week containing this date
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - (isoDayOfWeek - 1));
+  monday.setHours(0, 0, 0, 0);
+
+  // Find the Monday of the week containing the first day of the month
+  const firstDay = new Date(monthStart);
+  firstDay.setHours(0, 0, 0, 0);
+  const firstDayOfWeek = firstDay.getDay();
+  const firstIsoDayOfWeek = firstDayOfWeek === 0 ? 7 : firstDayOfWeek;
+
+  const firstMonday = new Date(firstDay);
+  firstMonday.setDate(firstDay.getDate() - (firstIsoDayOfWeek - 1));
+  firstMonday.setHours(0, 0, 0, 0);
+
+  // Calculate the difference in weeks
+  const diffTime = monday.getTime() - firstMonday.getTime();
+  const diffWeeks = Math.round(diffTime / (1000 * 60 * 60 * 24 * 7));
+
+  return diffWeeks + 1;
 }
 
 export function getDayName(date: Date): string {
-  return date.toLocaleDateString("en-US", { weekday: "short" });
+  return date.toLocaleDateString("ro-RO", { weekday: "short" });
 }
 
 export function getDateKey(date: Date): string {
