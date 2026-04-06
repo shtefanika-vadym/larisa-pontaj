@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { MonthPicker } from "@/components/MonthPicker";
 import { ShiftTable } from "@/components/ShiftTable";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
@@ -31,12 +31,16 @@ const Index = () => {
     addEmployee,
     removeEmployee,
     saveAssignments,
-    getMonthAssignments,
+    subscribeToMonthAssignments,
     saveAssignmentEntry,
   } = useFirebaseData(year, month);
 
   const days = useMemo(() => getDaysInMonth(year, month), [year, month]);
   const viewDays = useMemo(() => getMonthViewDays(year, month), [year, month]);
+  const visibleMonthDays = useMemo(
+    () => viewDays.filter(d => d.getFullYear() === year && d.getMonth() === month),
+    [viewDays, year, month]
+  );
   const holidays = useHolidays(viewDays);
   const monthLabel = `${MONTH_NAMES[month]} ${year}`;
 
@@ -53,44 +57,74 @@ const Index = () => {
   }, [viewDays, year, month]);
 
   const [overflowAssignments, setOverflowAssignments] = useState<ShiftAssignment>({});
-  const loadedOverflowKeyRef = useRef<string>("");
 
   useEffect(() => {
-    const overflowKey = overflowMonths.map(m => `${m.year}-${m.month}`).join(",");
     if (overflowMonths.length === 0) {
       setOverflowAssignments({});
-      loadedOverflowKeyRef.current = overflowKey;
       return;
     }
-    let cancelled = false;
-    Promise.all(overflowMonths.map(({ year: y, month: m }) => getMonthAssignments(y, m))).then(results => {
-      if (cancelled) return;
+
+    // Keep per-month data in a closure-local map so each onSnapshot callback
+    // can update its slice and recompute the merged result.
+    const dataMap: Record<string, ShiftAssignment> = {};
+
+    const updateMerged = () => {
       const merged: ShiftAssignment = {};
-      results.forEach(monthData => {
+      Object.values(dataMap).forEach((monthData) => {
         Object.entries(monthData).forEach(([empId, dates]) => {
           if (!merged[empId]) merged[empId] = {};
           Object.assign(merged[empId], dates);
         });
       });
       setOverflowAssignments(merged);
-      loadedOverflowKeyRef.current = overflowKey;
-    });
-    return () => { cancelled = true; };
-  }, [overflowMonths, getMonthAssignments]);
+    };
 
-  // Merge current month + overflow months for display
+    const unsubscribes = overflowMonths.map(({ year: y, month: m }) => {
+      const key = `${y}-${m}`;
+      dataMap[key] = {};
+      return subscribeToMonthAssignments(y, m, (data) => {
+        dataMap[key] = data;
+        updateMerged();
+      });
+    });
+
+    return () => {
+      unsubscribes.forEach((unsub) => unsub());
+    };
+  }, [overflowMonths, subscribeToMonthAssignments]);
+
+  const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}-`;
+
   const mergedAssignments = useMemo(() => {
     const result: ShiftAssignment = {};
-    Object.entries(overflowAssignments).forEach(([empId, dates]) => {
-      if (!result[empId]) result[empId] = {};
-      Object.assign(result[empId], dates);
-    });
-    Object.entries(assignments).forEach(([empId, dates]) => {
-      if (!result[empId]) result[empId] = {};
-      Object.assign(result[empId], dates);
-    });
+
+    for (const source of [overflowAssignments, assignments]) {
+      for (const [empId, dates] of Object.entries(source)) {
+        if (!result[empId]) result[empId] = {};
+        Object.assign(result[empId], dates);
+      }
+    }
+
+    for (const [empId, dates] of Object.entries(overflowAssignments)) {
+      for (const [dateKey, shift] of Object.entries(dates)) {
+        if (!dateKey.startsWith(currentMonthPrefix)) {
+          if (!result[empId]) result[empId] = {};
+          result[empId][dateKey] = shift;
+        }
+      }
+    }
+
+    for (const [empId, dates] of Object.entries(assignments)) {
+      for (const [dateKey, shift] of Object.entries(dates)) {
+        if (dateKey.startsWith(currentMonthPrefix)) {
+          if (!result[empId]) result[empId] = {};
+          result[empId][dateKey] = shift;
+        }
+      }
+    }
+
     return result;
-  }, [assignments, overflowAssignments]);
+  }, [assignments, overflowAssignments, currentMonthPrefix]);
 
   const handleMonthChange = useCallback((y: number, m: number) => {
     setYear(y);

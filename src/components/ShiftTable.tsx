@@ -4,6 +4,7 @@ import {
   getDayName, getDateKey, getDaysOffInWeek, getWeekNumber,
   getISOWeekNumber, getISOWeeksInYear,
 } from "@/lib/shiftTypes";
+import { WeekExportButton } from "@/components/ExportButton";
 
 interface ShiftTableProps {
   employees: Employee[];
@@ -52,6 +53,15 @@ function ShiftCell({
 
 export function ShiftTable({ employees, days, monthDays, viewYear, viewMonth, holidays, assignments, onToggleShift }: ShiftTableProps) {
 
+  // Group days into Mon-Sun chunks for per-week export buttons
+  const weekChunks = useMemo(() => {
+    const chunks: Date[][] = [];
+    for (let i = 0; i < days.length; i += 7) {
+      chunks.push(days.slice(i, i + 7));
+    }
+    return chunks;
+  }, [days]);
+
   const weekBoundaries = useMemo(() => {
     const boundaries = new Set<number>();
     for (let i = 0; i < days.length; i++) {
@@ -93,6 +103,14 @@ export function ShiftTable({ employees, days, monthDays, viewYear, viewMonth, ho
   const isCurrentMonth = (date: Date): boolean =>
     date.getFullYear() === viewYear && date.getMonth() === viewMonth;
 
+  // Only use current-month days for the weekly days-off count.
+  // This prevents unloaded overflow data (other months) from inflating daysOff
+  // and incorrectly triggering the ✕ limit indicator on current-month cells.
+  const currentMonthDays = useMemo(
+    () => days.filter(d => d.getFullYear() === viewYear && d.getMonth() === viewMonth),
+    [days, viewYear, viewMonth]
+  );
+
   return (
     <div className="overflow-x-auto rounded-lg border bg-card">
       <table className="w-full border-collapse text-sm">
@@ -110,21 +128,37 @@ export function ShiftTable({ employees, days, monthDays, viewYear, viewMonth, ho
                 : getWeekColor(i);
 
               const isMonday = d.getDay() === 1;
+              const isSunday = d.getDay() === 0;
               const isoWeek = isMonday ? getISOWeekNumber(d) : null;
               const weeksInYear = isMonday ? getISOWeeksInYear(d.getFullYear()) : null;
+              const chunkIndex = (isMonday || isSunday)
+                ? weekChunks.findIndex(chunk => chunk.some(cd => getDateKey(cd) === getDateKey(d)))
+                : -1;
+              const weekChunk = chunkIndex >= 0 ? weekChunks[chunkIndex] : null;
 
               return (
                 <th
                   key={i}
-                  className={`px-0.5 sm:px-1 py-1 sm:py-2 text-center font-medium min-w-[30px] sm:min-w-[40px] ${baseColor} ${weekBoundaries.has(i) && !holiday ? "border-l-4 border-gray-900" : ""}`}
+                  className={`relative px-0.5 sm:px-1 py-1 sm:py-2 text-center font-medium min-w-[30px] sm:min-w-[40px] ${baseColor} ${weekBoundaries.has(i) && !holiday ? "border-l-4 border-gray-900" : ""}`}
                   title={holiday ? holidayName : undefined}
                 >
-                  <div className="text-[8px] sm:text-[9px] font-bold opacity-90 leading-none mb-0.5 whitespace-nowrap">
-                    {isoWeek !== null ? `S${isoWeek}/${weeksInYear}` : "\u00A0"}
-                  </div>
+                  {isSunday && weekChunk && (
+                    <div className="absolute bottom-0.5 right-0.5 z-10">
+                      <WeekExportButton
+                        weekDays={weekChunk}
+                        employees={employees}
+                        assignments={assignments}
+                        viewYear={viewYear}
+                        viewMonth={viewMonth}
+                      />
+                    </div>
+                  )}
                   <div className="text-[9px] sm:text-[10px] opacity-70">{getDayName(d)}</div>
                   <div className={`text-xs sm:text-sm ${holiday ? "font-bold" : ""}`}>{d.getDate()}</div>
                   <div className="text-[9px] font-normal mt-0.5">{holiday && !otherMonth ? "🎉" : "\u00A0"}</div>
+                  <div className="text-[8px] sm:text-[9px] font-bold opacity-90 leading-none whitespace-nowrap">
+                    {isoWeek !== null ? `S${isoWeek}/${weeksInYear}` : "\u00A0"}
+                  </div>
                 </th>
               );
             })}
@@ -140,7 +174,10 @@ export function ShiftTable({ employees, days, monthDays, viewYear, viewMonth, ho
               {days.map((d, i) => {
                 const dateKey = getDateKey(d);
                 const shift = assignments[emp.id]?.[dateKey] ?? null;
-                const daysOff = getDaysOffInWeek(assignments, emp.id, d, days);
+                const currentMonthCell = isCurrentMonth(d);
+                const daysOff = currentMonthCell
+                  ? getDaysOffInWeek(assignments, emp.id, d, currentMonthDays)
+                  : 0;
                 const reachedLimit = !shift && daysOff > 2;
                 return (
                   <ShiftCell

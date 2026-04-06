@@ -198,6 +198,23 @@ export function useFirebaseData(year?: number, month?: number) {
     }
   }, []);
 
+  const subscribeToMonthAssignments = useCallback(
+    (year: number, month: number, onData: (data: ShiftAssignment) => void): (() => void) => {
+      const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+      return onSnapshot(
+        doc(db, "assignments", monthKey),
+        (docSnap) => {
+          onData(docSnap.exists() ? (docSnap.data() as ShiftAssignment) : {});
+        },
+        (error) => {
+          console.error("Error subscribing to month assignments:", error);
+          onData({});
+        }
+      );
+    },
+    []
+  );
+
   const saveAssignmentEntry = useCallback(async (
     employeeId: string,
     dateKey: string,
@@ -231,6 +248,7 @@ export function useFirebaseData(year?: number, month?: number) {
     saveAssignments,
     loadAssignmentsForMonth,
     getMonthAssignments,
+    subscribeToMonthAssignments,
     saveAssignmentEntry,
   };
 }
