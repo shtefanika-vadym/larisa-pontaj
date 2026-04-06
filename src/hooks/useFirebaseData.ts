@@ -187,14 +187,50 @@ export function useFirebaseData(year?: number, month?: number) {
     }
   }, []);
 
+  const getMonthAssignments = useCallback(async (year: number, month: number): Promise<ShiftAssignment> => {
+    try {
+      const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+      const docSnap = await getDoc(doc(db, "assignments", monthKey));
+      return docSnap.exists() ? (docSnap.data() as ShiftAssignment) : {};
+    } catch (error) {
+      console.error("Error fetching month assignments:", error);
+      return {};
+    }
+  }, []);
+
+  const saveAssignmentEntry = useCallback(async (
+    employeeId: string,
+    dateKey: string,
+    shift: ShiftType,
+    targetYear: number,
+    targetMonth: number
+  ) => {
+    try {
+      const monthKey = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}`;
+      const docRef = doc(db, "assignments", monthKey);
+      const docSnap = await getDoc(docRef);
+      const existing = docSnap.exists() ? (docSnap.data() as ShiftAssignment) : {};
+      const updated = {
+        ...existing,
+        [employeeId]: { ...existing[employeeId], [dateKey]: shift },
+      };
+      await setDoc(docRef, updated);
+    } catch (error) {
+      console.error("Error saving assignment entry:", error);
+      throw error;
+    }
+  }, []);
+
   return {
     employees,
     assignments,
-    loading, // Now correctly tracks both sources
+    loading,
     saveEmployees,
     addEmployee,
     removeEmployee,
     saveAssignments,
     loadAssignmentsForMonth,
+    getMonthAssignments,
+    saveAssignmentEntry,
   };
 }

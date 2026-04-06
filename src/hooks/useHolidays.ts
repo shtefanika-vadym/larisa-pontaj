@@ -15,7 +15,7 @@ export function useHolidays(days: Date[]): Map<string, string> {
     const years = new Set<number>();
     days.forEach(d => years.add(d.getFullYear()));
 
-    
+
     const holidayMap = new Map<string, string>();
 
     Promise.all(

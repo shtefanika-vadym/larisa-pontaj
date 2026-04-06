@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { MonthPicker } from "@/components/MonthPicker";
 import { ShiftTable } from "@/components/ShiftTable";
 import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
@@ -31,12 +31,66 @@ const Index = () => {
     addEmployee,
     removeEmployee,
     saveAssignments,
+    getMonthAssignments,
+    saveAssignmentEntry,
   } = useFirebaseData(year, month);
 
   const days = useMemo(() => getDaysInMonth(year, month), [year, month]);
   const viewDays = useMemo(() => getMonthViewDays(year, month), [year, month]);
   const holidays = useHolidays(viewDays);
   const monthLabel = `${MONTH_NAMES[month]} ${year}`;
+
+  // Detect overflow months (days from adjacent months shown in the view)
+  const overflowMonths = useMemo(() => {
+    const seen = new Map<string, { year: number; month: number }>();
+    viewDays.forEach(d => {
+      if (d.getFullYear() !== year || d.getMonth() !== month) {
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        if (!seen.has(key)) seen.set(key, { year: d.getFullYear(), month: d.getMonth() });
+      }
+    });
+    return Array.from(seen.values());
+  }, [viewDays, year, month]);
+
+  const [overflowAssignments, setOverflowAssignments] = useState<ShiftAssignment>({});
+  const loadedOverflowKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    const overflowKey = overflowMonths.map(m => `${m.year}-${m.month}`).join(",");
+    if (overflowMonths.length === 0) {
+      setOverflowAssignments({});
+      loadedOverflowKeyRef.current = overflowKey;
+      return;
+    }
+    let cancelled = false;
+    Promise.all(overflowMonths.map(({ year: y, month: m }) => getMonthAssignments(y, m))).then(results => {
+      if (cancelled) return;
+      const merged: ShiftAssignment = {};
+      results.forEach(monthData => {
+        Object.entries(monthData).forEach(([empId, dates]) => {
+          if (!merged[empId]) merged[empId] = {};
+          Object.assign(merged[empId], dates);
+        });
+      });
+      setOverflowAssignments(merged);
+      loadedOverflowKeyRef.current = overflowKey;
+    });
+    return () => { cancelled = true; };
+  }, [overflowMonths, getMonthAssignments]);
+
+  // Merge current month + overflow months for display
+  const mergedAssignments = useMemo(() => {
+    const result: ShiftAssignment = {};
+    Object.entries(overflowAssignments).forEach(([empId, dates]) => {
+      if (!result[empId]) result[empId] = {};
+      Object.assign(result[empId], dates);
+    });
+    Object.entries(assignments).forEach(([empId, dates]) => {
+      if (!result[empId]) result[empId] = {};
+      Object.assign(result[empId], dates);
+    });
+    return result;
+  }, [assignments, overflowAssignments]);
 
   const handleMonthChange = useCallback((y: number, m: number) => {
     setYear(y);
@@ -52,22 +106,31 @@ const Index = () => {
 
   const toggleShift = useCallback(
     (employeeId: string, dateKey: string) => {
-      const current = assignments[employeeId]?.[dateKey] ?? null;
+      const current = mergedAssignments[employeeId]?.[dateKey] ?? null;
       const cycle: ShiftType[] = [null, "A", "B"];
-      const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
-      const next = cycle[nextIdx];
+      const next = cycle[(cycle.indexOf(current) + 1) % cycle.length];
 
-      const updatedAssignments = {
-        ...assignments,
-        [employeeId]: {
-          ...assignments[employeeId],
-          [dateKey]: next,
-        },
-      };
+      const [keyYearStr, keyMonthStr] = dateKey.split("-");
+      const keyYear = parseInt(keyYearStr);
+      const keyMonth = parseInt(keyMonthStr) - 1; // 0-based
 
-      saveAssignments(updatedAssignments, year, month);
+      if (keyYear === year && keyMonth === month) {
+        // Current month: update state normally
+        const updatedAssignments = {
+          ...assignments,
+          [employeeId]: { ...assignments[employeeId], [dateKey]: next },
+        };
+        saveAssignments(updatedAssignments, year, month);
+      } else {
+        // Overflow day: optimistic local update + save to the correct month
+        setOverflowAssignments(prev => ({
+          ...prev,
+          [employeeId]: { ...prev[employeeId], [dateKey]: next },
+        }));
+        saveAssignmentEntry(employeeId, dateKey, next, keyYear, keyMonth);
+      }
     },
-    [assignments, year, month, saveAssignments]
+    [mergedAssignments, assignments, year, month, saveAssignments, saveAssignmentEntry]
   );
 
   if (loading) {
@@ -147,14 +210,14 @@ const Index = () => {
           viewYear={year}
           viewMonth={month}
           holidays={holidays}
-          assignments={assignments}
+          assignments={mergedAssignments}
           onToggleShift={toggleShift}
         />
 
         <AnalyticsDashboard
             employees={employees}
             days={days}
-            assignments={assignments}
+            assignments={mergedAssignments}
             holidays={holidays}
             onChange={handleEmployeesChange}
             onAdd={addEmployee}

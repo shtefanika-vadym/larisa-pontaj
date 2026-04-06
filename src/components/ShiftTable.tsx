@@ -119,14 +119,12 @@ export function ShiftTable({ employees, days, monthDays, viewYear, viewMonth, ho
                   className={`px-0.5 sm:px-1 py-1 sm:py-2 text-center font-medium min-w-[30px] sm:min-w-[40px] ${baseColor} ${weekBoundaries.has(i) && !holiday ? "border-l-4 border-gray-900" : ""}`}
                   title={holiday ? holidayName : undefined}
                 >
-                  {isoWeek !== null && (
-                    <div className="text-[8px] sm:text-[9px] font-bold opacity-90 leading-none mb-0.5 whitespace-nowrap">
-                      S{isoWeek}/{weeksInYear}
-                    </div>
-                  )}
+                  <div className="text-[8px] sm:text-[9px] font-bold opacity-90 leading-none mb-0.5 whitespace-nowrap">
+                    {isoWeek !== null ? `S${isoWeek}/${weeksInYear}` : "\u00A0"}
+                  </div>
                   <div className="text-[9px] sm:text-[10px] opacity-70">{getDayName(d)}</div>
                   <div className={`text-xs sm:text-sm ${holiday ? "font-bold" : ""}`}>{d.getDate()}</div>
-                  {holiday && !otherMonth && <div className="text-[9px] font-normal mt-0.5">🎉</div>}
+                  <div className="text-[9px] font-normal mt-0.5">{holiday && !otherMonth ? "🎉" : "\u00A0"}</div>
                 </th>
               );
             })}
